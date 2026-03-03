@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Millionaire Where?</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style>
+        body { margin:0; padding:0; font-family: sans-serif; }
+        #controls { padding:10px; background:#f8f8f8; }
+        #controls label { margin-right:5px; }
+        #controls select, #controls input { margin-right:15px; }
+    </style>
+</head>
+<body>
+    <h1>Welcome to Millionaire Where?</h1>
+    <p>Select your currency and enter your bank balance to see where you're a millionaire.</p>
+
+    <div id="controls">
+        <label for="currency">Home currency:</label>
+        <select id="currency">
+            <!-- options will be populated by script -->
+        </select>
+        <label for="balance">Balance:</label>
+        <input type="text" id="balance" placeholder="Amount" />
+    </div>
+
+    <div id="map" style="height: 80vh;"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+    // live exchange rates (USD base) and dynamic currency/country lists
+    let ratesByUSD = null;            // filled after fetching API
+    let currencies = [];             // will hold keys from ratesByUSD plus USD
+    let countryCurrency = {};        // map ISO A2 -> currency code
+    let ratesLoaded = false, countriesLoaded = false;
+
+    function checkReady() {
+        if (ratesLoaded && countriesLoaded) {
+            sel.disabled = false;
+            document.getElementById('balance').disabled = false;
+        }
+    }
+
+    function populateSel() {
+        const sel = document.getElementById('currency');
+        sel.innerHTML = '';
+        currencies.forEach(c=>{
+            const opt = document.createElement('option'); opt.value=c; opt.textContent=c;
+            sel.appendChild(opt);
+        });
+    }
+
+    function getRate(from, to) {
+        if (from === to) return 1;
+        if (!ratesByUSD) return 1;
+        const rateFromUSD = from === 'USD' ? 1 : ratesByUSD[from];
+        const rateToUSD   = to   === 'USD' ? 1 : ratesByUSD[to];
+        if (!rateFromUSD || !rateToUSD) return 1;
+        return rateToUSD / rateFromUSD;
+    }
+
+    function initRates() {
+        // try exchangerate-api which currently offers free USD-based rates
+        fetch('https://api.exchangerate-api.com/v4/latest/USD')
+            .then(r=>r.json())
+            .then(json=>{
+                if (!json.rates) throw new Error('missing rates in response');
+                ratesByUSD = json.rates;
+                ratesLoaded = true;
+                currencies = Object.keys(ratesByUSD).concat('USD').sort();
+                populateSel();
+                sel.value = 'USD';
+                updateHighlights();
+                checkReady();
+            })
+            .catch(err=>{
+                console.error('rate fetch failed',err);
+                // keep controls disabled; user can refresh or try again later
+            });
+    }
+
+    function initCountryCurrency() {
+        // grab country list from mledoze dataset and map ISO A2 codes to first currency found
+        fetch('https://raw.githubusercontent.com/mledoze/countries/master/countries.json')
+            .then(r=>r.json())
+            .then(list=>{
+                list.forEach(c=>{
+                    if(c.cca2 && c.currencies) {
+                        const codes = Object.keys(c.currencies);
+                        if(codes.length) countryCurrency[c.cca2] = codes[0];
+                    }
+                });
+                countriesLoaded = true;
+                updateHighlights();
+                checkReady();
+            })
+            .catch(err=>console.error('country mapping failed',err));
+    }
+
+    const sel = document.getElementById('currency');
+    // disable until everything is loaded
+    sel.disabled = true;
+    document.getElementById('balance').disabled = true;
+
+    // kick off external data loads
+    initRates();
+    initCountryCurrency();
+
+    // map setup
+    const map = L.map('map', { scrollWheelZoom:false, touchZoom:false, dragging:false, zoomControl:false }).setView([20,0],2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution:'&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let countryLayer;
+    fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+        .then(r=>r.json())
+        .then(data=>{
+            countryLayer = L.geoJSON(data, {
+                style: ()=>({color:'#555',weight:1,fillOpacity:0.3}),
+                onEachFeature: (feature, layer)=>{
+                    layer.on({
+                        mouseover: ()=> layer.setStyle({fillOpacity:0.7}),
+                        mouseout: ()=> layer.setStyle({fillOpacity:0.3}),
+                    });
+                    // tooltip will be bound dynamically only for highlighted countries
+                }
+            }).addTo(map);
+            // once data is ready, attempt to refresh highlights (in case user already entered values)
+            updateHighlights();
+        });
+
+    function updateHighlights() {
+        const cur = sel.value;
+        const raw = document.getElementById('balance').value || '';
+        const bal = parseFloat(raw.replace(/,/g,'')) || 0;
+        console.log('updating',cur,bal);
+        if (!countryLayer) return;
+        countryLayer.eachLayer(layer=>{
+            // property name in this GeoJSON is ISO3166-1-Alpha-2
+            const iso = layer.feature.properties['ISO3166-1-Alpha-2'];
+            const countryCur = countryCurrency[iso] || iso; // fallback
+            const rate = getRate(cur, countryCur) || 0;
+            const localAmount = bal * rate; // convert user's balance to local currency
+            // clear any previous tooltip
+            if (layer.getTooltip()) layer.unbindTooltip();
+            const name = layer.feature.properties.name;
+            if (localAmount >= 1000000) {
+                // millionaire
+                layer.setStyle({fillColor:'green',fillOpacity:0.7});
+                const text = `${name}: ${bal.toLocaleString()} ${cur} =&gt; ${localAmount.toLocaleString()} ${countryCur}`;
+                layer.bindTooltip(text, {sticky:true});
+            } else if (countryCur === cur) {
+                // same currency
+                layer.setStyle({fillColor:'orange',fillOpacity:0.7});
+                const text = `${name}: this country uses ${cur}, you already know how much it's worth here!`;
+                layer.bindTooltip(text, {sticky:true});
+            } else {
+                // not millionaire
+                layer.setStyle({fillColor:'red',fillOpacity:0.7});
+                const text = `${name}: Not quite, you're only worth ${localAmount.toLocaleString()} ${countryCur} here`;
+                layer.bindTooltip(text, {sticky:true});
+            }
+        });
+    }
+
+    sel.addEventListener('change', updateHighlights);
+    const balanceInput = document.getElementById('balance');
+    balanceInput.addEventListener('input', e => {
+        let val = e.target.value || '';
+        // allow digits, commas and decimal point
+        val = val.replace(/[^0-9.,]/g,'');
+        // keep track if user just typed a dot at end
+        const endsWithDot = val.endsWith('.');
+        // split at dot to separate integer and fraction
+        const parts = val.split('.');
+        let intPart = parts[0].replace(/,/g,'');
+        let fracPart = parts[1] || '';
+        if (parts.length > 2) {
+            fracPart = parts.slice(1).join('');
+        }
+        // limit to two decimals
+        if (fracPart.length > 2) fracPart = fracPart.slice(0,2);
+        // reinsert commas into integer part
+        const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g,",");
+        let formatted = withCommas;
+        if (fracPart.length || endsWithDot) {
+            formatted += '.' + fracPart;
+        }
+        if (formatted !== e.target.value) {
+            e.target.value = formatted;
+        }
+        updateHighlights();
+    });
+    // if the user types before the layer is loaded we still want later updates to apply
+    // (rates and country lookup will call updateHighlights once they finish, as does the
+    // geojson load above)
+
+    </script>
+</body>
+</html>
