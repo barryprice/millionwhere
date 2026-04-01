@@ -180,17 +180,17 @@
             if (localAmount >= 1000000) {
                 // millionaire
                 layer.setStyle({fillColor:'green',fillOpacity:0.7});
-                const text = `${name}: ${bal.toLocaleString()} ${cur} =&gt; ${localAmount.toLocaleString()} ${countryCur}`;
+                const text = `💰 ${name}: ${bal.toLocaleString()} ${cur} is ${localAmount.toLocaleString()} ${countryCur}!`;
                 layer.bindTooltip(text, {sticky:true});
             } else if (countryCur === cur) {
                 // same currency
                 layer.setStyle({fillColor:'orange',fillOpacity:0.7});
-                const text = `${name}: this country uses ${cur}, you already know how much it's worth here!`;
+                const text = `🧐 ${name}: this country uses ${cur}, you already know how much it's worth here!`;
                 layer.bindTooltip(text, {sticky:true});
             } else {
                 // not millionaire
                 layer.setStyle({fillColor:'red',fillOpacity:0.7});
-                const text = `${name}: Not quite, you're only worth ${localAmount.toLocaleString()} ${countryCur} here`;
+                const text = `❌ ${name}: Not quite, you're only worth ${localAmount.toLocaleString()} ${countryCur} here`;
                 layer.bindTooltip(text, {sticky:true});
             }
         });
