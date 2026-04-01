@@ -7,16 +7,29 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <style>
-        body { margin:0; padding:0; font-family: sans-serif; overflow-x:hidden; }
-        h1,p { margin:10px; padding:10px; }
+        html, body { margin:0; padding:0; font-family: sans-serif; overflow-x:hidden; min-width:0; }
+        *, *::before, *::after { box-sizing: border-box; }
+        h1, p { margin:10px; padding:10px; }
         footer { text-align: center; }
-        #controls { padding:10px; background:#f8f8f8; }
-        #controls label { margin-right:5px; }
-        #controls select, #controls input { margin-right:15px; }
+        #controls {
+            padding:10px;
+            background:#f8f8f8;
+            display:flex;
+            flex-wrap:wrap;
+            align-items:center;
+            gap:0.5rem;
+        }
+        #controls label { margin-right:0; }
+        #controls select,
+        #controls input {
+            flex:1 1 160px;
+            min-width:0;
+            max-width:100%;
+        }
         #map {
             width: 100%;
             max-width: 100%;
-            box-sizing: border-box;
+            min-width: 0;
             height: 80vh;
         }
     </style>
@@ -208,7 +221,7 @@
 
     </script>
 
-    <footer>An exercise in LLM agentic tomfoolery by <a href="https://barryprice.uk">Barry Price</a>.</footer>
+    <footer>An exercise in LLM agentic tomfoolery. <a href="https://github.com/barryprice/millionwhere">Source</a>.</footer>
 
 </body>
 </html>
