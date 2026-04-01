@@ -33,6 +33,7 @@
             height: 80vh;
         }
     </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 </head>
 <body>
     <h1>Welcome to Millionaire Where?</h1>
@@ -130,7 +131,7 @@
     initCountryCurrency();
 
     // map setup
-    const map = L.map('map', { scrollWheelZoom:false, touchZoom:false, dragging:false, zoomControl:false }).setView([20,0],2);
+    const map = L.map('map', { scrollWheelZoom:false, touchZoom:false, dragging:false, zoomControl:false }).setView([20,0],2).fitWorld();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution:'&copy; OpenStreetMap contributors'
     }).addTo(map);
