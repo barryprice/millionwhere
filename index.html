@@ -4,239 +4,411 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Millionaire Where?</title>
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <style>
-        html, body { margin:0; padding:0; font-family: sans-serif; min-width:0; }
         *, *::before, *::after { box-sizing: border-box; }
-        h1, p { margin:10px; padding:10px; }
-        footer { text-align: center; }
-        #controls {
-            padding:10px;
-            background:#f8f8f8;
-            display:flex;
-            flex-wrap:wrap;
-            align-items:center;
-            gap:0.5rem;
+        html, body {
+            margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            height: 100dvh;
         }
-        #controls label { margin-right:0; }
-        #controls select,
-        #controls input {
-            flex:1 1 160px;
-            min-width:0;
-            max-width:100%;
-        }
-        #map {
-            width: 100%;
-            max-width: 100vw;
-            min-width: 0;
-            height: min(80vh, calc(100vh - 180px));
+        body {
+            display: flex;
+            flex-direction: column;
         }
 
-        @media (max-width: 600px) {
-            #map {
-                height: min(70vh, calc(100vh - 180px));
+        h1 {
+            margin: 0;
+            padding: 12px 16px 4px;
+            font-size: 1.4rem;
+        }
+        #tagline {
+            margin: 0;
+            padding: 0 16px 8px;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        /* ── Status banner ── */
+        #status {
+            display: none;
+        }
+        #status.loading,
+        #status.error {
+            display: block;
+            padding: 8px 16px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        #status.loading { background: #fff3cd; color: #856404; }
+        #status.error   { background: #f8d7da; color: #721c24; }
+        #status.error button {
+            margin-left: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        /* ── Controls bar ── */
+        #controls {
+            padding: 8px 16px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            background: #f8f8f8;
+            border-top: 1px solid #e0e0e0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        #controls label {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        #controls select,
+        #controls input {
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            min-width: 0;
+        }
+        #controls select { flex: 1 1 100px; }
+        #controls input  { flex: 1 1 140px; }
+
+        /* ── Map fills remaining space ── */
+        #map {
+            flex: 1;
+            min-height: 0;
+            height: 100%;
+        }
+
+        /* ── Footer ── */
+        footer {
+            padding: 6px;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #999;
+            background: #fafafa;
+            border-top: 1px solid #e0e0e0;
+        }
+        footer a { color: #666; }
+
+        /* ── Mobile ── */
+        @media (max-width: 480px) {
+            #controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            h1 { font-size: 1.2rem; }
+            .leaflet-tooltip {
+                font-size: 12px;
+                max-width: 200px;
             }
         }
     </style>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 </head>
 <body>
-    <h1>Welcome to Millionaire Where?</h1>
-    <p>Select your currency and enter your bank balance to see where you're a millionaire.</p>
 
-    <div id="controls">
-        <label for="currency">Home currency:</label>
-        <select id="currency">
-            <!-- options will be populated by script -->
-        </select>
-        <label for="balance">Balance:</label>
-        <input type="text" id="balance" placeholder="Amount" />
-    </div>
+<h1>Millionaire Where?</h1>
+<p id="tagline">Select your currency and enter your bank balance to see where you're a millionaire.</p>
 
-    <div id="map"></div>
+<div id="status" class="loading">Loading exchange rates and country data…</div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <script>
-    // live exchange rates (USD base) and dynamic currency/country lists
-    let ratesByUSD = null;            // filled after fetching API
-    let currencies = [];             // will hold keys from ratesByUSD plus USD
-    let countryCurrency = {};        // map ISO A2 -> currency code
-    let ratesLoaded = false, countriesLoaded = false;
+<div id="controls">
+    <label for="currency">Currency:</label>
+    <select id="currency" disabled></select>
+    <label for="balance">Balance:</label>
+    <input type="text" id="balance" inputmode="decimal" placeholder="e.g. 50,000" disabled>
+</div>
 
-    function checkReady() {
-        if (ratesLoaded && countriesLoaded) {
-            sel.disabled = false;
-            document.getElementById('balance').disabled = false;
+<div id="map"></div>
+
+<footer>
+    An exercise in LLM agentic tomfoolery.
+    <a href="https://github.com/barryprice/millionwhere">Source</a>.
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+    'use strict';
+
+    /* ═══════════════════════════════════════════════════════════════
+       State
+       ═══════════════════════════════════════════════════════════════ */
+    const state = {
+        rates: null,
+        countryCurrency: {},
+        ratesOK: false,
+        countriesOK: false,
+        geoJSONLoaded: false
+    };
+
+    /* ═══════════════════════════════════════════════════════════════
+       DOM refs
+       ═══════════════════════════════════════════════════════════════ */
+    const statusEl    = document.getElementById('status');
+    const currencySel = document.getElementById('currency');
+    const balanceInp  = document.getElementById('balance');
+
+    /* ═══════════════════════════════════════════════════════════════
+       Status banner helpers
+       ═══════════════════════════════════════════════════════════════ */
+    function showStatus(mode, html) {
+        if (!mode) {
+            statusEl.style.display = 'none';
+            statusEl.className = '';
+            statusEl.innerHTML = '';
+            return;
         }
+        statusEl.style.display = '';
+        statusEl.className = mode;
+        statusEl.innerHTML = html;
     }
 
-    function populateSel() {
-        const sel = document.getElementById('currency');
-        sel.innerHTML = '';
-        currencies.forEach(c=>{
-            const opt = document.createElement('option'); opt.value=c; opt.textContent=c;
-            sel.appendChild(opt);
-        });
-    }
-
+    /* ═══════════════════════════════════════════════════════════════
+       Rate math
+       ═══════════════════════════════════════════════════════════════ */
     function getRate(from, to) {
         if (from === to) return 1;
-        if (!ratesByUSD) return 1;
-        const rateFromUSD = from === 'USD' ? 1 : ratesByUSD[from];
-        const rateToUSD   = to   === 'USD' ? 1 : ratesByUSD[to];
-        if (!rateFromUSD || !rateToUSD) return 1;
-        return rateToUSD / rateFromUSD;
+        const rTo   = state.rates[to];
+        const rFrom = state.rates[from];
+        if (!rTo || !rFrom || rFrom === 0) return 0;
+        return rTo / rFrom;
     }
 
-    function initRates() {
-        // try exchangerate-api which currently offers free USD-based rates
+    /* ═══════════════════════════════════════════════════════════════
+       Fetch: exchange rates
+       ═══════════════════════════════════════════════════════════════ */
+    function fetchRates() {
+        showStatus('loading', 'Loading exchange rates…');
         fetch('https://api.exchangerate-api.com/v4/latest/USD')
-            .then(r=>r.json())
-            .then(json=>{
-                if (!json.rates) throw new Error('missing rates in response');
-                ratesByUSD = json.rates;
-                ratesLoaded = true;
-                currencies = Object.keys(ratesByUSD).concat('USD').sort();
-                populateSel();
-                sel.value = 'USD';
-                updateHighlights();
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                state.rates = data.rates;
+                var currencies = Object.keys(data.rates).sort();
+                currencySel.innerHTML = currencies.map(function (c) {
+                    return '<option value="' + c + '"' + (c === 'USD' ? ' selected' : '') + '>' + c + '</option>';
+                }).join('');
+                state.ratesOK = true;
                 checkReady();
             })
-            .catch(err=>{
-                console.error('rate fetch failed',err);
-                // keep controls disabled; user can refresh or try again later
+            .catch(function (err) {
+                showStatus('error',
+                    'Exchange rates failed to load: ' + err.message +
+                    '. <button id="retry-rates">Retry</button>');
+                document.getElementById('retry-rates').onclick = fetchRates;
             });
     }
 
-    function initCountryCurrency() {
-        // grab country list from mledoze dataset and map ISO A2 codes to first currency found
+    /* ═══════════════════════════════════════════════════════════════
+       Fetch: country → currency mapping
+       ═══════════════════════════════════════════════════════════════ */
+    function fetchCountryCurrency() {
         fetch('https://raw.githubusercontent.com/mledoze/countries/master/countries.json')
-            .then(r=>r.json())
-            .then(list=>{
-                list.forEach(c=>{
-                    if(c.cca2 && c.currencies) {
-                        const codes = Object.keys(c.currencies);
-                        if(codes.length) countryCurrency[c.cca2] = codes[0];
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                for (var i = 0; i < data.length; i++) {
+                    var c = data[i];
+                    if (c.cca2 && c.currencies) {
+                        var cur = Object.keys(c.currencies)[0];
+                        state.countryCurrency[c.cca2] = cur;
+                        if (c.cca3) state.countryCurrency[c.cca3] = cur;
+                        if (c.name && c.name.common) {
+                            state.countryCurrency[c.name.common.toLowerCase()] = cur;
+                        }
                     }
-                });
-                countriesLoaded = true;
-                updateHighlights();
+                }
+                state.countriesOK = true;
                 checkReady();
             })
-            .catch(err=>console.error('country mapping failed',err));
+            .catch(function (err) {
+                showStatus('error',
+                    'Country data failed to load: ' + err.message +
+                    '. <button id="retry-countries">Retry</button>');
+                document.getElementById('retry-countries').onclick = fetchCountryCurrency;
+            });
     }
 
-    const sel = document.getElementById('currency');
-    // disable until everything is loaded
-    sel.disabled = true;
-    document.getElementById('balance').disabled = true;
+    /* ═══════════════════════════════════════════════════════════════
+       Ready check — both data fetches must succeed
+       ═══════════════════════════════════════════════════════════════ */
+    function checkReady() {
+        if (state.ratesOK && state.countriesOK) {
+            showStatus(null);
+            currencySel.disabled = false;
+            balanceInp.disabled = false;
+            updateHighlights();
+        }
+    }
 
-    // kick off external data loads
-    initRates();
-    initCountryCurrency();
+    /* ═══════════════════════════════════════════════════════════════
+       Map initialisation
+       ═══════════════════════════════════════════════════════════════ */
+    var map = L.map('map', {
+        scrollWheelZoom: true,
+        touchZoom: true,
+        dragging: true,
+        zoomControl: true,
+        zoomSnap: 0.25
+    }).setView([20, 0], 2);
 
-    // map setup
-    const map = L.map('map', { scrollWheelZoom:false, touchZoom:true, dragging:false, zoomControl:false }).setView([20,0],2).fitWorld();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution:'&copy; OpenStreetMap contributors'
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19
     }).addTo(map);
 
-    function refreshMap() {
-        window.requestAnimationFrame(() => map.invalidateSize());
-    }
-    window.addEventListener('resize', refreshMap);
-    window.addEventListener('orientationchange', refreshMap);
-    window.addEventListener('load', refreshMap);
-    refreshMap();
+    var geoLayer = null;
 
-    let countryLayer;
-    fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
-        .then(r=>r.json())
-        .then(data=>{
-            countryLayer = L.geoJSON(data, {
-                style: ()=>({color:'#555',weight:1,fillOpacity:0.3}),
-                onEachFeature: (feature, layer)=>{
-                    layer.on({
-                        mouseover: ()=> layer.setStyle({fillOpacity:0.7}),
-                        mouseout: ()=> layer.setStyle({fillOpacity:0.3}),
-                    });
-                    // tooltip will be bound dynamically only for highlighted countries
-                }
-            }).addTo(map);
-            // once data is ready, attempt to refresh highlights (in case user already entered values)
-            updateHighlights();
-        });
+    function defaultStyle() {
+        return { fillColor: '#ccc', fillOpacity: 0.4, color: '#999', weight: 0.5 };
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       GeoJSON load
+       ═══════════════════════════════════════════════════════════════ */
+    function loadGeoJSON() {
+        fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                geoLayer = L.geoJSON(data, {
+                    style: defaultStyle,
+                    onEachFeature: null  // tooltips set dynamically in updateHighlights
+                }).addTo(map);
+                state.geoJSONLoaded = true;
+                updateHighlights();
+            })
+            .catch(function (err) {
+                showStatus('error',
+                    'Map data failed to load: ' + err.message +
+                    '. <button id="retry-geojson">Retry</button>');
+                document.getElementById('retry-geojson').onclick = loadGeoJSON;
+            });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Highlight update (debounced)
+       ═══════════════════════════════════════════════════════════════ */
+    var updateTimer = null;
 
     function updateHighlights() {
-        const cur = sel.value;
-        const raw = document.getElementById('balance').value || '';
-        const bal = parseFloat(raw.replace(/,/g,'')) || 0;
-        console.log('updating',cur,bal);
-        if (!countryLayer) return;
-        countryLayer.eachLayer(layer=>{
-            // property name in this GeoJSON is ISO3166-1-Alpha-2
-            const iso = layer.feature.properties['ISO3166-1-Alpha-2'];
-            const countryCur = countryCurrency[iso] || iso; // fallback
-            const rate = getRate(cur, countryCur) || 0;
-            const localAmount = bal * rate; // convert user's balance to local currency
-            // clear any previous tooltip
-            if (layer.getTooltip()) layer.unbindTooltip();
-            const name = layer.feature.properties.name;
-            if (localAmount >= 1000000) {
-                // millionaire
-                layer.setStyle({fillColor:'green',fillOpacity:0.7});
-                const text = `💰 ${name}: ${bal.toLocaleString()} ${cur} is ${localAmount.toLocaleString()} ${countryCur}!`;
-                layer.bindTooltip(text, {sticky:true});
-            } else if (countryCur === cur) {
-                // same currency
-                layer.setStyle({fillColor:'orange',fillOpacity:0.7});
-                const text = `🧐 ${name}: this country uses ${cur}, you already know how much it's worth here!`;
-                layer.bindTooltip(text, {sticky:true});
-            } else {
-                // not millionaire
-                layer.setStyle({fillColor:'red',fillOpacity:0.7});
-                const text = `❌ ${name}: Not quite, you're only worth ${localAmount.toLocaleString()} ${countryCur} here`;
-                layer.bindTooltip(text, {sticky:true});
+        if (!state.geoJSONLoaded || !geoLayer) return;
+
+        var homeCurrency = currencySel.value;
+        var raw    = balanceInp.value.replace(/[^0-9.]/g, '');
+        var balance = parseFloat(raw) || 0;
+
+        if (balance === 0) {
+            geoLayer.eachLayer(function (layer) {
+                geoLayer.resetStyle(layer);
+                layer.unbindTooltip();
+            });
+            return;
+        }
+
+        var fmt = new Intl.NumberFormat();
+
+        geoLayer.eachLayer(function (layer) {
+            var props = layer.feature.properties;
+            var iso2  = props['ISO3166-1-Alpha-2'];
+            var name  = props.name || iso2;
+
+            // Try cca2, then cca3, then lowercased name, fallback to raw iso2
+            var cc = state.countryCurrency[iso2];
+            if (!cc) {
+                var iso3 = props['ISO3166-1-Alpha-3'];
+                cc = state.countryCurrency[iso3];
             }
+            if (!cc) {
+                cc = state.countryCurrency[name.toLowerCase()];
+            }
+            if (!cc) cc = iso2;
+
+            // If the exchange rate API has no rate for this currency, leave grey
+            if (!state.rates[cc]) {
+                geoLayer.resetStyle(layer);
+                layer.bindTooltip('Sorry, we don\u2019t have current exchange rates for ' + name + '.', { sticky: true });
+                return;
+            }
+            var localAmount   = balance * getRate(homeCurrency, cc);
+            var isMillionaire = localAmount >= 1000000;
+            var isSame        = cc === homeCurrency;
+
+            var color, tooltip;
+            var balFmt   = fmt.format(Math.round(balance));
+            var localFmt = localAmount ? fmt.format(Math.round(localAmount)) : '0';
+
+            if (isMillionaire) {
+                color   = '#2ecc71';
+                tooltip = '\u{1F4B0} ' + name + ': ' + balFmt + ' ' + homeCurrency +
+                          ' = ' + localFmt + ' ' + cc + '!';
+            } else if (isSame) {
+                color   = '#f39c12';
+                tooltip = '\u{1F9D0} ' + name + ': also uses ' + homeCurrency + '.';
+            } else {
+                color   = '#e74c3c';
+                tooltip = '\u274C ' + name + ': only ' + localFmt + ' ' + cc + '.';
+            }
+
+            layer.setStyle({ fillColor: color, fillOpacity: 0.6, color: '#666', weight: 0.5 });
+            layer.bindTooltip(tooltip, { sticky: true });
         });
     }
 
-    sel.addEventListener('change', updateHighlights);
-    const balanceInput = document.getElementById('balance');
-    balanceInput.addEventListener('input', e => {
-        let val = e.target.value || '';
-        // allow digits, commas and decimal point
-        val = val.replace(/[^0-9.,]/g,'');
-        // keep track if user just typed a dot at end
-        const endsWithDot = val.endsWith('.');
-        // split at dot to separate integer and fraction
-        const parts = val.split('.');
-        let intPart = parts[0].replace(/,/g,'');
-        let fracPart = parts[1] || '';
-        if (parts.length > 2) {
-            fracPart = parts.slice(1).join('');
+    function debouncedUpdate() {
+        clearTimeout(updateTimer);
+        updateTimer = setTimeout(updateHighlights, 300);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Input formatting — format on blur, raw on focus
+       ═══════════════════════════════════════════════════════════════ */
+    balanceInp.addEventListener('blur', function () {
+        var raw = balanceInp.value.replace(/[^0-9.]/g, '');
+        var num = parseFloat(raw);
+        if (!isNaN(num)) {
+            balanceInp.value = new Intl.NumberFormat().format(num);
         }
-        // limit to two decimals
-        if (fracPart.length > 2) fracPart = fracPart.slice(0,2);
-        // reinsert commas into integer part
-        const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g,",");
-        let formatted = withCommas;
-        if (fracPart.length || endsWithDot) {
-            formatted += '.' + fracPart;
-        }
-        if (formatted !== e.target.value) {
-            e.target.value = formatted;
-        }
-        updateHighlights();
     });
-    // if the user types before the layer is loaded we still want later updates to apply
-    // (rates and country lookup will call updateHighlights once they finish, as does the
-    // geojson load above)
 
-    </script>
+    balanceInp.addEventListener('focus', function () {
+        balanceInp.value = balanceInp.value.replace(/[^0-9.]/g, '');
+    });
 
-    <footer>An exercise in LLM agentic tomfoolery. <a href="https://github.com/barryprice/millionwhere">Source</a>.</footer>
+    /* ═══════════════════════════════════════════════════════════════
+       Event wiring
+       ═══════════════════════════════════════════════════════════════ */
+    currencySel.addEventListener('change', debouncedUpdate);
+    balanceInp.addEventListener('input', debouncedUpdate);
+    window.addEventListener('resize', function () { map.invalidateSize(); });
+
+    /* ═══════════════════════════════════════════════════════════════
+       Bootstrap
+       ═══════════════════════════════════════════════════════════════ */
+    fetchRates();
+    fetchCountryCurrency();
+    loadGeoJSON();
+
+    /* ── Expose retry callbacks for error-banner buttons ── */
+    window.millionwhere = {
+        fetchRates: fetchRates,
+        fetchCountryCurrency: fetchCountryCurrency,
+        loadGeoJSON: loadGeoJSON
+    };
+
+})();
+</script>
 
 </body>
 </html>
