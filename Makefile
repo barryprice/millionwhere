@@ -10,8 +10,9 @@ setup:
 
 push:
 	@lxc info $(CONTAINER) >/dev/null 2>&1 || $(MAKE) setup
-	lxc exec $(CONTAINER) -- rm -f /tmp/index.html /tmp/.markuplintrc.json /tmp/eslint.config.cjs
+	lxc exec $(CONTAINER) -- rm -f /tmp/index.html /tmp/.markuplintrc.json /tmp/eslint.config.cjs /tmp/app.js
 	lxc file push index.html $(CONTAINER)/tmp/index.html
+	lxc file push app.js $(CONTAINER)/tmp/app.js
 	lxc file push .markuplintrc.json $(CONTAINER)/tmp/.markuplintrc.json
 	lxc file push eslint.config.cjs $(CONTAINER)/tmp/eslint.config.cjs
 
@@ -19,8 +20,8 @@ markuplint: push
 	lxc exec $(CONTAINER) -- npx --yes markuplint /tmp/index.html
 
 eslint: push
-	lxc exec $(CONTAINER) -- bash -c 'cd /tmp && node -e "require(\"eslint-plugin-html\")" 2>/dev/null || npm install eslint-plugin-html @eslint/js --save'
-	lxc exec $(CONTAINER) -- bash -c 'cd /tmp && /usr/local/bin/eslint -c eslint.config.cjs --no-ignore index.html'
+	lxc exec $(CONTAINER) -- bash -c 'cd /tmp && node -e "require(\"@eslint/js\")" 2>/dev/null || npm install @eslint/js --save'
+	lxc exec $(CONTAINER) -- bash -c 'cd /tmp && /usr/local/bin/eslint -c eslint.config.cjs --no-ignore app.js'
 
 lint:
 	$(MAKE) markuplint
