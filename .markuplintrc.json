@@ -1,0 +1,9 @@
+{
+  "extends": ["markuplint:recommended"],
+  "parser": {
+    ".html$": "@markuplint/html-parser"
+  },
+  "specs": {
+    ".html$": "@markuplint/html-spec"
+  }
+}
