@@ -1,31 +1,38 @@
-.PHONY: lint markuplint eslint push setup clean
+.PHONY: ensure-uv ensure-nodeenv ensure-node markuplint eslint lint clean
 
-CONTAINER := millionwhere-linter
-IMAGE     := ubuntu:r
+NODE_VENV := .node-venv
+NODE     := $(NODE_VENV)/bin/node
+NPM      := $(NODE_VENV)/bin/npm
+NPX      := $(NODE_VENV)/bin/npx
 
-setup:
-	@lxc info $(CONTAINER) >/dev/null 2>&1 || lxc launch $(IMAGE) $(CONTAINER)
-	@lxc exec $(CONTAINER) -- bash -c 'command -v node || (apt-get update -qq && apt-get install -y -qq nodejs npm)'
-	@lxc exec $(CONTAINER) -- bash -c 'test -x /usr/local/bin/eslint || npm install -g eslint'
+export PATH := $(CURDIR)/$(NODE_VENV)/bin:$(PATH)
 
-push:
-	@lxc info $(CONTAINER) >/dev/null 2>&1 || $(MAKE) setup
-	lxc exec $(CONTAINER) -- rm -f /tmp/index.html /tmp/.markuplintrc.json /tmp/eslint.config.cjs /tmp/app.js
-	lxc file push index.html $(CONTAINER)/tmp/index.html
-	lxc file push app.js $(CONTAINER)/tmp/app.js
-	lxc file push .markuplintrc.json $(CONTAINER)/tmp/.markuplintrc.json
-	lxc file push eslint.config.cjs $(CONTAINER)/tmp/eslint.config.cjs
+all: lint
 
-markuplint: push
-	lxc exec $(CONTAINER) -- npx --yes markuplint /tmp/index.html
+ensure-uv:
+	@command -v uv >/dev/null 2>&1 || { \
+		echo "Installing uv snap..."; \
+		sudo snap install astral-uv --classic; \
+	}
 
-eslint: push
-	lxc exec $(CONTAINER) -- bash -c 'cd /tmp && node -e "require(\"@eslint/js\")" 2>/dev/null || npm install @eslint/js --save'
-	lxc exec $(CONTAINER) -- bash -c 'cd /tmp && /usr/local/bin/eslint -c eslint.config.cjs --no-ignore app.js'
+ensure-nodeenv: ensure-uv
+	@uv tool run nodeenv --version >/dev/null 2>&1 || uv tool install nodeenv
+
+ensure-node: ensure-nodeenv
+	@if [ ! -x $(NODE) ]; then \
+		uv tool run nodeenv $(NODE_VENV); \
+	fi
+
+markuplint: ensure-node
+	@$(NPX) --yes markuplint index.html
+
+eslint: ensure-node
+	@${NODE} -e 'require("@eslint/js")' 2>/dev/null || ${NPM} install @eslint/js --save
+	@${NPX} --yes eslint -c eslint.config.cjs --no-ignore app.js
 
 lint:
-	$(MAKE) markuplint
-	$(MAKE) eslint
+	@$(MAKE) markuplint
+	@$(MAKE) eslint
 
 clean:
-	lxc delete $(CONTAINER) --force
+	@rm -rf ${NODE_VENV} node_modules package.json package-lock.json
